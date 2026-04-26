@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/material.dart';
 
@@ -5,8 +6,27 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final ListBloc bloc;
+
+  @override
+  void initState() {
+    bloc = ListBloc(RepoList())..add(LoadList());
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    bloc.close();
+    super.dispose();
+  }
 
   // This widget is the root of your application.
   @override
@@ -14,6 +34,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
+        cardTheme: CardThemeData(margin: .zero),
         // This is the theme of your application.
         //
         // TRY THIS: Try running your application with "flutter run". You'll see
@@ -31,8 +52,45 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: MyHomePage(),
+      home: BlocProvider.value(value: bloc, child: MyHomePage()),
     );
+  }
+}
+
+class RepoList {
+  List<String> getItem() {
+    return ["Reliance Industries", "TCS", "HDFC Bank", "Infosys"];
+  }
+}
+
+abstract class ListState {}
+
+class InitList extends ListState {}
+
+class LoadedList extends ListState {
+  final List<String> list;
+
+  LoadedList(this.list);
+}
+
+abstract class ListEvent {}
+
+class LoadList extends ListEvent {
+  LoadList();
+}
+
+class ReorderList extends ListEvent {
+  final List<String> list;
+
+  ReorderList(this.list);
+}
+
+class ListBloc extends Bloc<ListEvent, ListState> {
+  final RepoList repo;
+  ListBloc(this.repo) : super(InitList()) {
+    on<LoadList>((event, emit) => emit(LoadedList(repo.getItem())));
+
+    on<ReorderList>((event, emit) => emit(LoadedList(event.list)));
   }
 }
 
@@ -64,44 +122,86 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  // BlocProvider(create: (_) => ItemBloc(), child: const MyApp())
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView.builder(
-        itemCount: 2,
-
-        itemBuilder: (context, index) {
-          return BlocProvider(
-            create: (_) => ItemBloc(),
-            child: BlocBuilder<ItemBloc, ItemState>(
-              builder: (BuildContext context, ItemState state) {
-                return GestureDetector(
-                  onLongPress: () {
-                    context.read<ItemBloc>().add(ItemHold());
-                  },
-                  child: switch (state) {
-                    Hold() => SizedBox.square(
-                      dimension: 400,
-                      child: Container(
-                        color: Colors.black,
-                        child: Center(child: Text("Hello World")),
-                      ),
-                    ),
-                    Init() => SizedBox.square(
-                      dimension: 400,
-                      child: Container(
-                        color: Colors.grey,
-                        child: Center(child: Text("Hello World")),
-                      ),
-                    ),
-                    ItemState() => throw UnimplementedError(),
-                  },
-                );
-              },
-            ),
-          );
+      body: BlocBuilder<ListBloc, ListState>(
+        buildWhen: (pre, now) {
+          if (pre is LoadedList && now is LoadedList) return false;
+          return true;
         },
+        builder: (context, state) {
+          switch (state) {
+            case InitList():
+              return Center(
+                child: SizedBox.square(
+                  dimension: 400,
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            case LoadedList(:final list):
+              final mutList = [...list];
+              return ReorderableListView.builder(
+                itemExtent: 40,
+                buildDefaultDragHandles: false,
+                onReorder: (oldIndex, newIndex) {
+                  if (oldIndex < newIndex) newIndex -= 1;
+                  final item = mutList.removeAt(oldIndex);
+                  mutList.insert(newIndex, item);
+                  context.read<ListBloc>().add(ReorderList(mutList));
+                },
+                itemCount: mutList.length,
+
+                itemBuilder: (context, index) {
+                  return ReorderableDelayedDragStartListener(
+                    key: ValueKey(mutList[index]),
+                    index: index,
+                    child: ItemWidget(mutList[index]),
+                  );
+                },
+              );
+            case ListState():
+              return throw UnimplementedError();
+          }
+        },
+      ),
+    );
+  }
+}
+
+class ItemWidget extends StatefulWidget {
+  const ItemWidget(this.item, {super.key});
+
+  final String item;
+
+  @override
+  State<ItemWidget> createState() => _ItemWidgetState();
+}
+
+class _ItemWidgetState extends State<ItemWidget> {
+  late final ItemBloc bloc;
+
+  @override
+  void initState() {
+    super.initState();
+    bloc = ItemBloc();
+  }
+
+  @override
+  void dispose() {
+    bloc.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 21 / 4,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Align(alignment: .centerLeft, child: Text(widget.item)),
+        ),
       ),
     );
   }
