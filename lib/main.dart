@@ -142,7 +142,6 @@ class _MyHomePageState extends State<MyHomePage> {
             case LoadedList(:final list):
               final mutList = [...list];
               return ReorderableListView.builder(
-                itemExtent: 40,
                 buildDefaultDragHandles: false,
                 onReorder: (oldIndex, newIndex) {
                   if (oldIndex < newIndex) newIndex -= 1;
